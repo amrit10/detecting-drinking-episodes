@@ -100,17 +100,21 @@ def get_window_10(x):
     t = t.replace(second = int(t.second / 10))
     return t.timestamp()
      
-
-frame = pd.read_csv('/content/drive/My Drive/CSE512Data/all_accelerometer_data_pids_13.csv')
+print("here 0")
+frame = pd.read_csv('../data/all_accelerometer_data_pids_13.csv')
+print("here 1")
 frame['window'] = frame['time'].apply(get_time_value)
+print("here 2")
 frame['window10'] = frame['time'].apply(get_time_ignore_second)
+print("here 3")
 frame['selected_window_10'] = frame['window'].apply(get_window_10)
-     
+print("here 4")
 
 funcs = [('mean', np.mean), ('variance', np.var), ('median', np.median), ('min', np.min), ('max', np.max), ('rms', lambda x: np.sqrt(np.mean(np.square(x)))), ('energy_entropy', lambda x: energy_entropy(x, 10)), ('energy', energy), ('skew', skew), ('Kurtiosis', kurtosis)]
 fft_funcs = [('variance', np.var), ('spectral_centroid_spread', lambda x: spectral_centroid_spread(x, 40)) ]
 cols = ['x', 'y', 'z']
      
+print("here 5")
 
 look_up_frames = dict()
 for pid in frame.pid.unique():
@@ -127,3 +131,42 @@ for pid in frame.pid.unique():
       response_frame['_'.join(['win_10', col, 'FFT', key])] = col_fft.apply(func)
   response_frame.pid = pid
   look_up_frames[pid] = response_frame
+
+
+final_frames = dict()
+for pid in frame.pid.unique():
+  response_frame = pd.DataFrame()
+  grouped = frame[frame.pid == pid].groupby('window')
+  for col in cols:
+    col_array = grouped[col].apply(np.array)
+    col_fft = col_array.apply(scipy.fft.fft)
+    for key, func in funcs:
+      print(pid,' :Working on', col, '   ', key)
+      response_frame['_'.join([ col, key])] = col_array.apply(func)
+    for key, func in fft_funcs:
+      print(pid,' :Working on', col, '   FFT ', key)
+      response_frame['_'.join([ col, 'FFT', key])] = col_fft.apply(func)
+  response_frame['window10'] = grouped['window10'].apply(lambda x: x.unique().tolist()[0])
+  response_frame['pid'] = pid
+  response_frame['TAC_reading'] = response_frame.index.to_series().apply(lambda x: get_tac_value(pid, x))
+  final_frames[pid] = (response_frame)
+
+final_frame = pd.DataFrame()
+for key in final_frames:
+  val = final_frames[key].copy()
+  val.reset_index(drop= True, inplace= True)
+  final_frame = pd.concat([final_frame, val])
+
+good = final_frame.dropna()
+
+good.to_csv('../data/good_again_bhas.csv')
+
+wow = pd.DataFrame()
+for key in final_frames:
+  val1 = final_frames[key].copy()
+  val1 = val1.reset_index(drop= True)
+  val2 = look_up_frames[key].copy().reset_index()
+  wow = pd.concat([wow, pd.merge(val1, val2, how='inner', on = 'window10')])
+wow = wow.dropna()
+     
+wow.to_csv('../data/mega3.csv')
