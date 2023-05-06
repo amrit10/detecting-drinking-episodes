@@ -18,7 +18,7 @@ def get_time_value(x):
   return int(t.timestamp())
 
 # Returns accelerometer data with timestamps as milliseconds
-def get_accelerometer_data(path = '../data/all_accelerometer_data_pids_13.csv', pid = None):
+def get_accelerometer_data(pids = [], path = '../data/all_accelerometer_data_pids_13.csv'):
   print("Reading Accelerometer Data:")
   # Read Accelerometer Data
   acc_data = pd.read_csv('../data/all_accelerometer_data_pids_13.csv')
@@ -32,11 +32,8 @@ def get_accelerometer_data(path = '../data/all_accelerometer_data_pids_13.csv', 
   # acc_data.head()
   # pids = acc_data['pid'].unique()
 
-  
-
-  if pid != None:
-    print("PID: " + str(pid))
-    acc_data = acc_data[acc_data.pid == pid]
+  # print("PID: " + str(pid))
+  acc_data = acc_data[acc_data["pid"].isin(pids)]
 
   print("Accelerometer Data Shape: " + str(acc_data.shape))
   print("Accelerometer Data PIDs: " + ",".join(acc_data['pid'].unique()))
@@ -47,18 +44,23 @@ def get_accelerometer_data(path = '../data/all_accelerometer_data_pids_13.csv', 
 
 # Get TAC data for a given PID
 # Binarizes TAC on a thresold
-def get_tac_data(pid = "BK7610", path_prefix = '../data/clean_tac/'):
+def get_tac_data(pids = [], path_prefix = '../data/clean_tac/'):
   print("Reading TAC Data:")
-  clean_tac_data = pd.read_csv('../data/clean_tac/' + pid + TAC_DATA_FILE_SUFFIX)    
 
-  assert clean_tac_data['timestamp'].is_monotonic_increasing, "TAC Data is not sorted by time"
+  clean_tac_data = pd.DataFrame()
+  for pid in pids:
+    temp_df = pd.read_csv(path_prefix + pid + TAC_DATA_FILE_SUFFIX)    
+
+    assert temp_df['timestamp'].is_monotonic_increasing, "TAC Data is not sorted by time"
 
   # Binarizing TAC value to drunk or not drunk based on threshold
-  clean_tac_data["tac"] = np.where(clean_tac_data["TAC_Reading"] > TAC_DRUNK_THRESHOLD, 1, 0)
+    temp_df["tac"] = np.where(temp_df["TAC_Reading"] > TAC_DRUNK_THRESHOLD, 1, 0)
 
-  clean_tac_data = clean_tac_data.drop(columns="TAC_Reading")
-  clean_tac_data = clean_tac_data.rename(columns={"tac": "TAC_Reading"})
-  # clean_tac_data.describe()
+    temp_df = temp_df.drop(columns="TAC_Reading")
+    temp_df = temp_df.rename(columns={"tac": "TAC_Reading"})
+    temp_df["pid"] = pid
+    clean_tac_data = pd.concat([clean_tac_data, temp_df])
+  
   print("-------------------")
   return clean_tac_data
 
@@ -82,26 +84,36 @@ def get_tac_data(pid = "BK7610", path_prefix = '../data/clean_tac/'):
 #   upsampled_tac = pd.DataFrame(all_labels, columns = ["tac", "time"])
 #   return upsampled_tac
 
-def upsample_and_join_tac_with_acc(tac_data, acc_data):
-  tac_data_mod = tac_data.copy()
-  acc_data_mod = acc_data.copy()
-  tac_data_mod["from"] = tac_data_mod["timestamp"].shift(1, fill_value=-1) + 1
-  tac_data_mod.index = pd.IntervalIndex.from_arrays(tac_data_mod["from"], tac_data_mod["timestamp"], closed = "both")
-  acc_data_mod['tac'] = acc_data_mod["time"].apply(lambda x: tac_data_mod.iloc[tac_data_mod.index.get_loc(x)]["TAC_Reading"])
+def upsample_and_join_tac_with_acc(tac_data, acc_data, pids):
+  final_data = pd.DataFrame()
+  for pid in pids:
+    print("[Upsampling] " + str(pid))
+    tac_data_mod = tac_data[tac_data["pid"] == pid]
+    assert tac_data_mod['timestamp'].is_monotonic_increasing, "[Upsampling] TAC Data is not sorted by time for " + str(pid)
+    acc_data_mod = acc_data[acc_data["pid"] == pid]
+    assert acc_data_mod['time'].is_monotonic_increasing, "[Upsampling] TAC Data is not sorted by time for " + str(pid)
+    tac_data_mod = tac_data_mod.drop(columns = "pid")
 
-  return acc_data_mod
+    tac_data_mod["from"] = tac_data_mod["timestamp"].shift(1, fill_value=-1) + 1
+    tac_data_mod.index = pd.IntervalIndex.from_arrays(tac_data_mod["from"], tac_data_mod["timestamp"], closed = "both")
+    acc_data_mod['tac'] = acc_data_mod["time"].apply(lambda x: tac_data_mod.iloc[tac_data_mod.index.get_loc(x)]["TAC_Reading"])
+    final_data = pd.concat([final_data, acc_data_mod])
+
+  return final_data
 
 def sample_n_values_per_unit_time(data, n = 20, replace = True):
   return data.groupby([ "pid", "time"]).sample(n = n, replace=replace)
 
-def create_sliding_window(data, window_size = 10, sample_n = 20):
+def create_sliding_window(data,pids, window_size = 10, sample_n = 20):
   data_copy = data.copy()
-  pids = data["pid"].unique()
   final = []
   labels = []
   for pid in pids:
+    print("[Sliding Window] " + str(pid))
     temptemp = data_copy[data_copy['pid'] == pid]
+    assert temptemp["time"].is_monotonic_increasing, "[Sliding Window] Data is not sorted by time for " + str(pid)
     times = temptemp.time.unique()
+    
     final_temp =[]
     labels_temp = []
     for i in range(len(times)):
@@ -123,6 +135,8 @@ def create_sliding_window(data, window_size = 10, sample_n = 20):
 
     final.append(np.array(final_temp))
     labels.append(np.array(labels_temp))
+    # final = np.append(final, np.array(final_temp))
+    # labels = np.append(labels, np.array(labels_temp))
   
   final_arr = np.asarray(final).astype('float32')
   labels_arr = np.asarray(labels).astype('float32')
@@ -172,48 +186,78 @@ def shuffle(X, Y):
   return X, Y
 
 
-def create_pickle(X, Y, folder_path = "../data/pickles"):
+def create_pickle(X, Y, filename, folder_path = "../data/pickles"):
   d = dict(X = X, Y = Y)
   if os.path.exists(folder_path) ==  False:
     os.makedirs(folder_path)
 
-  with open(f'{folder_path}/data.p', 'wb') as pickle_file:
+  with open(folder_path + "/" + filename + ".p", 'wb') as pickle_file:
       pickle.dump(d, pickle_file)
-  print(f'Data has been dumped into {folder_path}/data.p!')
+  print("Data has been dumped into " + folder_path + "/" + filename + ".p")
 
+def create_pickle_df(data, filename, folder_path = "../data/pickles"):
+  d = dict(data = data)
+  if os.path.exists(folder_path) ==  False:
+    os.makedirs(folder_path)
+
+  with open(folder_path + "/" + filename + ".p", 'wb') as pickle_file:
+      pickle.dump(d, pickle_file)
+  print("Data has been dumped into " + folder_path + "/" + filename + ".p")
+
+
+# MAIN
 if __name__ == "__main__":
   # Constants - Sampling
   sampling_rate = 20
   replace_while_sampling = True
   
   # Sampling - Sliding Window
-  create_sliding_window = True
+  sliding_window = True
   window_size = 10
   
+  # CC6740 - ignore
+  # pids = ["BK7610", "BU4707", "DC6359"]
+  pids = ["DC6359"]
+  filename = "data_slidingwindow" + str(sliding_window) + str(window_size) + "_samplingrate" + str(sampling_rate)
+
+  write_pd = True
+  if write_pd:
+    filename += "_df"
+
   # Read Data
-  acc_data = get_accelerometer_data()
-  tac_data = get_tac_data()
+  acc_data = get_accelerometer_data(pids = pids)
+  tac_data = get_tac_data(pids = pids)
   
   print("Upsampling and joining TAC data with Acc Data")
-  acc_tac_data = upsample_and_join_tac_with_acc(tac_data, acc_data)
+  acc_tac_data = upsample_and_join_tac_with_acc(tac_data, acc_data, pids)
   print("[Done] Upsampling and joining TAC data with Acc Data")
 
   print("Sampling " + str(sampling_rate) + " records per unit time")
   acc_tac_data = sample_n_values_per_unit_time(acc_tac_data, sampling_rate, replace_while_sampling)
   print("[Done] Sampling " + str(sampling_rate) + " records per unit time")
 
-  if create_sliding_window:
-    print("Sampling " + str(sampling_rate) + " records per unit time")
-    X, Y = create_sliding_window(acc_tac_data, window_size, sampling_rate)
-    print("[Done] Sampling " + str(sampling_rate) + " records per unit time")
+  if sliding_window:
+    print("Creating sliding window of size " + str(window_size))
+    X, Y = create_sliding_window(acc_tac_data,pids, window_size, sampling_rate)
+    print("[Done] Creating sliding window of size " + str(window_size))
     X = np.reshape(X, (X.shape[1], X.shape[2], X.shape[3])) 
     Y = np.reshape(Y, (Y.shape[1], Y.shape[2]))
+
+    X, Y = shuffle(X, Y)
+
+    print("Writing data")
+    create_pickle(X, Y, filename)
+    print("Data Written")
   else:
-    X, Y = pd_to_np(acc_tac_data)
+    if write_pd:
+      create_pickle_df(acc_tac_data, filename)
+      
+    else:
+      X, Y = pd_to_np(acc_tac_data)
 
 
-  X, Y = shuffle(X, Y)
+      X, Y = shuffle(X, Y)
 
-  print("Writing data")
-  create_pickle(X, Y)
-  print("Data Written")
+      print("Writing data")
+      create_pickle(X, Y, filename)
+      print("Data Written")
