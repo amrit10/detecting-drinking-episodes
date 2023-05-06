@@ -161,12 +161,14 @@ def pd_to_np(data):
   return final_arr, labels_arr
 
 def shuffle(X, Y):
+  print("Shuffling data")
   indices = range(len(X))
   indices = tf.random.shuffle(indices)
 
   X = tf.gather(X, indices)
   Y = tf.gather(Y, indices)
 
+  print("[Done] Shuffling data")
   return X, Y
 
 
@@ -192,12 +194,18 @@ if __name__ == "__main__":
   acc_data = get_accelerometer_data()
   tac_data = get_tac_data()
   
+  print("Upsampling and joining TAC data with Acc Data")
   acc_tac_data = upsample_and_join_tac_with_acc(tac_data, acc_data)
+  print("[Done] Upsampling and joining TAC data with Acc Data")
 
+  print("Sampling " + str(sampling_rate) + " records per unit time")
   acc_tac_data = sample_n_values_per_unit_time(acc_tac_data, sampling_rate, replace_while_sampling)
+  print("[Done] Sampling " + str(sampling_rate) + " records per unit time")
 
   if create_sliding_window:
+    print("Sampling " + str(sampling_rate) + " records per unit time")
     X, Y = create_sliding_window(acc_tac_data, window_size, sampling_rate)
+    print("[Done] Sampling " + str(sampling_rate) + " records per unit time")
     X = np.reshape(X, (X.shape[1], X.shape[2], X.shape[3])) 
     Y = np.reshape(Y, (Y.shape[1], Y.shape[2]))
   else:
@@ -206,4 +214,6 @@ if __name__ == "__main__":
 
   X, Y = shuffle(X, Y)
 
-  # create_pickle(X, Y)
+  print("Writing data")
+  create_pickle(X, Y)
+  print("Data Written")
