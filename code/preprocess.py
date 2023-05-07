@@ -101,8 +101,18 @@ def upsample_and_join_tac_with_acc(tac_data, acc_data, pids):
 
   return final_data
 
-def sample_n_values_per_unit_time(data, n = 20, replace = True):
-  return data.groupby([ "pid", "time"]).sample(n = n, replace=replace)
+def sample_n_values_per_unit_time(data, n = 20):
+  t = data.groupby([ "pid", "time"])["time"].agg(["count"])
+  og_row_count = len(data)
+
+  # Filtering
+  pid_time_pair = t[t["count"] > n].index.values
+  tuples = pd.MultiIndex.from_frame(data[["pid", "time"]])
+  data_temp = data[tuples.isin(pid_time_pair)]
+
+  filtered_row_count = len(data_temp)
+  print("Dropped " + str(og_row_count - filtered_row_count) + " out of " + str(og_row_count) + " rows while sampling to satisy even sampling rate")
+  return data_temp.groupby([ "pid", "time"]).sample(n = n)
 
 def create_sliding_window(data,pids, window_size = 10, sample_n = 20):
   data_copy = data.copy()
@@ -209,15 +219,14 @@ def create_pickle_df(data, filename, folder_path = "../data/pickles"):
 if __name__ == "__main__":
   # Constants - Sampling
   sampling_rate = 20
-  replace_while_sampling = True
   
   # Sampling - Sliding Window
   sliding_window = False
   window_size = 10
   
   # CC6740 - ignore
-  pids = ["BK7610", "BU4707", "DC6359"]
-  # pids = ["DC6359"]
+  # pids = ["BK7610", "BU4707", "DC6359"]
+  pids = ["DC6359"]
   filename = "data_slidingwindow" + str(sliding_window) + str(window_size) + "_samplingrate" + str(sampling_rate)
 
   write_pd = True
@@ -233,7 +242,7 @@ if __name__ == "__main__":
   print("[Done] Upsampling and joining TAC data with Acc Data")
 
   print("Sampling " + str(sampling_rate) + " records per unit time")
-  acc_tac_data = sample_n_values_per_unit_time(acc_tac_data, sampling_rate, replace_while_sampling)
+  acc_tac_data = sample_n_values_per_unit_time(acc_tac_data, sampling_rate)
   print("[Done] Sampling " + str(sampling_rate) + " records per unit time")
 
   if sliding_window:
