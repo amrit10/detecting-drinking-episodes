@@ -212,12 +212,12 @@ if __name__ == "__main__":
   replace_while_sampling = True
   
   # Sampling - Sliding Window
-  sliding_window = True
+  sliding_window = False
   window_size = 10
   
   # CC6740 - ignore
-  # pids = ["BK7610", "BU4707", "DC6359"]
-  pids = ["DC6359"]
+  pids = ["BK7610", "BU4707", "DC6359"]
+  # pids = ["DC6359"]
   filename = "data_slidingwindow" + str(sliding_window) + str(window_size) + "_samplingrate" + str(sampling_rate)
 
   write_pd = True
