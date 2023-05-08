@@ -105,6 +105,9 @@ def sample_n_values_per_unit_time(data, n = 20):
   t = data.groupby([ "pid", "time"])["time"].agg(["count"])
   og_row_count = len(data)
 
+  print("Max count is " + str(t["count"].max()))
+  print("Min count is " + str(t["count"].min()))
+
   # Filtering
   pid_time_pair = t[t["count"] > n].index.values
   tuples = pd.MultiIndex.from_frame(data[["pid", "time"]])
@@ -112,6 +115,7 @@ def sample_n_values_per_unit_time(data, n = 20):
 
   filtered_row_count = len(data_temp)
   print("Dropped " + str(og_row_count - filtered_row_count) + " out of " + str(og_row_count) + " rows while sampling to satisy even sampling rate")
+  
   return data_temp.groupby([ "pid", "time"]).sample(n = n)
 
 def create_sliding_window(data,pids, window_size = 10, sample_n = 20):
@@ -220,13 +224,22 @@ if __name__ == "__main__":
   # Constants - Sampling
   sampling_rate = 20
   
+# For one PID
+#     range of sampling frequency raw
+#     
+
+# Processed data
+# Numbers of records per pid
+# 
+
   # Sampling - Sliding Window
   sliding_window = False
   window_size = 10
   
-  # CC6740 - ignore
+  # CC6740, DK3500 - ignore
+  pids = ["BK7610", "BU4707", "DC6359", "HV0618", "JB3156", "JR8022", "MC7070", "MJ8002", "PC6771", "SA0297", "SF3079"]
   # pids = ["BK7610", "BU4707", "DC6359"]
-  pids = ["DC6359"]
+  # pids = ["DC6359"]
   filename = "data_slidingwindow" + str(sliding_window) + str(window_size) + "_samplingrate" + str(sampling_rate)
 
   write_pd = True
@@ -244,6 +257,8 @@ if __name__ == "__main__":
   print("Sampling " + str(sampling_rate) + " records per unit time")
   acc_tac_data = sample_n_values_per_unit_time(acc_tac_data, sampling_rate)
   print("[Done] Sampling " + str(sampling_rate) + " records per unit time")
+
+  print(acc_tac_data.groupby([ "pid"])["time"].agg(["count"]))
 
   if sliding_window:
     print("Creating sliding window of size " + str(window_size))
