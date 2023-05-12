@@ -236,11 +236,11 @@ if __name__ == "__main__":
   sliding_window = False
   window_size = 10
   
-  # CC6740, DK3500 - ignore
-  pids = ["BK7610", "BU4707", "DC6359", "HV0618", "JB3156", "JR8022", "MC7070", "MJ8002", "PC6771", "SA0297", "SF3079"]
+  # CC6740, DK3500, HV0618, PC6771, MJ8002, SA0297- ignore
+  pids = ["BK7610", "BU4707", "DC6359", "JB3156", "JR8022", "MC7070", "SF3079"]
   # pids = ["BK7610", "BU4707", "DC6359"]
   # pids = ["DC6359"]
-  filename = "data_slidingwindow" + str(sliding_window) + str(window_size) + "_samplingrate" + str(sampling_rate)
+  filename = "all_pids_data_slidingwindow" + str(sliding_window) + str(window_size) + "_samplingrate" + str(sampling_rate)
 
   write_pd = True
   if write_pd:
